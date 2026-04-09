@@ -7,21 +7,26 @@ MODEL_DIR = BASE_DIR / "models"
 
 model = joblib.load(MODEL_DIR / "model.pkl")
 preprocessors = joblib.load(MODEL_DIR / "preprocessors.pkl")
-imputer, scaler = preprocessors
+
+# Compatibilidade com dois formatos:
+# - legado: tupla (imputer, scaler)
+# - atual: dict {"imputer": ..., "scaler": ..., "features"/"feature_columns": [...]}
+if isinstance(preprocessors, dict):
+    imputer = preprocessors["imputer"]
+    scaler = preprocessors["scaler"]
+    feature_columns = preprocessors.get("feature_columns") or preprocessors.get("features")
+else:
+    imputer, scaler = preprocessors
+    feature_columns = None
+
+if not feature_columns:
+    feature_columns = ["AGEP", "COW", "SCHL", "MAR", "OCCP", "POBP", "WKHP", "SEX", "RAC1P"]
 
 
 def predict_income(data):
-    features = np.array([[
-        data["AGEP"],
-        data["COW"],
-        data["SCHL"],
-        data["MAR"],
-        data["OCCP"],
-        data["POBP"],
-        data["WKHP"],
-        data["SEX"],
-        data["RAC1P"]
-    ]], dtype=float)
+    # Se o modelo treinou com features extras (ex.: RELP), preenche com 0 quando ausente no app.
+    row = [data.get(col, 0) for col in feature_columns]
+    features = np.array([row], dtype=float)
 
     features = imputer.transform(features)
     features = scaler.transform(features)

@@ -6,34 +6,45 @@ from folktables import ACSDataSource, ACSIncome
 from imblearn.over_sampling import SMOTENC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, classification_report
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-from config import RANDOM_STATE, TEST_SIZE
-
+# Assumindo que esses valores estão no seu config.py
+try:
+    from config import RANDOM_STATE, TEST_SIZE
+except ImportError:
+    RANDOM_STATE = 42
+    TEST_SIZE = 0.2
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_DIR = BASE_DIR / "models"
 MODEL_DIR.mkdir(exist_ok=True)
 
-
+# 1) Download e Correção de Esquema (2023)
 data_source = ACSDataSource(
-    survey_year="2021",
+    survey_year="2023",
     horizon="1-Year",
     survey="person"
 )
 
+print("Baixando dados de 2023...")
 acs_data = data_source.get_data(states=["CA"], download=True).copy()
 
-features = ACSIncome.features
-available_features = [f for f in features if f in acs_data.columns]
+# Mapeamento essencial para dados pós-2021
+# RELP virou RELSHIPP nas versões recentes do Censo
+if "RELSHIPP" in acs_data.columns and "RELP" not in acs_data.columns:
+    print("Corrigindo coluna RELSHIPP -> RELP para compatibilidade.")
+    acs_data = acs_data.rename(columns={"RELSHIPP": "RELP"})
 
-print("Features usadas:", available_features)
-
-X = acs_data[available_features].to_numpy()
+# Usar as features padrão do ACSIncome (agora que corrigimos o RELP)
+features_to_use = ACSIncome.features
+X = acs_data[features_to_use].to_numpy()
 y = (acs_data["PINCP"] > 50000).astype(int).to_numpy()
 
+print(f"Features utilizadas: {features_to_use}")
+
+# 2) Split
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
@@ -42,57 +53,53 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y
 )
 
-# 1) Tratamento de dados faltantes
-imputer = SimpleImputer(strategy="median")
+imputer = SimpleImputer(strategy="most_frequent")
 X_train = imputer.fit_transform(X_train)
 X_test = imputer.transform(X_test)
 
-print("Tem NaN no treino?", np.isnan(X_train).any())
-print("Tem NaN no teste?", np.isnan(X_test).any())
 
-print("Antes do SMOTENC:", np.bincount(y_train))
-
-# 2) Balanceamento com SMOTENC
-# Índices das colunas categóricas dentro de available_features
-categorical_feature_names = {"COW", "SCHL", "MAR", "OCCP", "POBP", "SEX", "RAC1P"}
+categorical_feature_names = {"COW", "SCHL", "MAR", "OCCP", "POBP", "RELP", "SEX", "RAC1P"}
 categorical_indices = [
-    i for i, feature_name in enumerate(available_features)
-    if feature_name in categorical_feature_names
+    i for i, f_name in enumerate(features_to_use)
+    if f_name in categorical_feature_names
 ]
 
-print("Índices categóricos para SMOTENC:", categorical_indices)
+print(f"Distribuição original: {np.bincount(y_train)}")
+print(f"Aplicando SMOTENC nos índices: {categorical_indices}")
 
 smotenc = SMOTENC(
     categorical_features=categorical_indices,
-    random_state=RANDOM_STATE
+    random_state=RANDOM_STATE,
 )
 
 X_train, y_train = smotenc.fit_resample(X_train, y_train)
+print(f"Distribuição pós-SMOTENC: {np.bincount(y_train)}")
 
-print("Depois do SMOTENC:", np.bincount(y_train))
-
-# 3) Padronização
+# 5) Padronização
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
-preprocessors = (imputer, scaler)
-
-# 4) Modelo
+# 6) Treinamento do Modelo
 model = RandomForestClassifier(
     random_state=RANDOM_STATE,
     n_estimators=200,
+    max_depth=20, # Adicionado para evitar overfitting excessivo em dados ruidosos
     n_jobs=-1
 )
 
+print("Treinando o Random Forest...")
 model.fit(X_train, y_train)
 
-# 5) Avaliação
+# 7) Avaliação detalhada
 y_pred = model.predict(X_test)
-print("F1-score:", f1_score(y_test, y_pred))
+print("\n--- Relatório de Performance ---")
+print(f"F1-score: {f1_score(y_test, y_pred):.4f}")
+print(classification_report(y_test, y_pred))
 
-# 6) Salvar artefatos
+# 8) Salvar artefatos
 joblib.dump(model, MODEL_DIR / "model.pkl")
-joblib.dump(preprocessors, MODEL_DIR / "preprocessors.pkl")
+# Guardamos o imputer e o scaler juntos para facilitar o pipeline de inferência
+joblib.dump({"imputer": imputer, "scaler": scaler, "features": features_to_use}, MODEL_DIR / "preprocessors.pkl")
 
-print("Modelo treinado e salvo!")
+print(f"Modelo e pré-processadores salvos em: {MODEL_DIR}")
