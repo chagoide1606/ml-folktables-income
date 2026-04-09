@@ -2,55 +2,19 @@ import sys
 from pathlib import Path
 import streamlit as st
 
-SEX_MAP = {
-    "Masculino": 1,
-    "Feminino": 2
-}
-
-MAR_MAP = {
-    "Casado": 1,
-    "Viúvo": 2,
-    "Divorciado": 3,
-    "Separado": 4,
-    "Nunca casou": 5
-}
-
-SCHL_MAP = {
-    "Sem escolaridade": 1,
-    "Fundamental incompleto": 8,
-    "Fundamental completo": 12,
-    "Ensino médio incompleto": 14,
-    "Ensino médio completo": 16,
-    "Alguma faculdade": 18,
-    "Bacharelado": 21,
-    "Mestrado": 22,
-    "Doutorado": 24
-}
-
-COW_MAP = {
-    "Empregado empresa privada": 1,
-    "Empregado governo": 2,
-    "Autônomo": 3,
-    "Trabalhador familiar": 4,
-    "Desempregado": 9
-}
-
-RACE_MAP = {
-    "Branco": 1,
-    "Negro": 2,
-    "Indígena americano": 3,
-    "Alasca nativo": 4,
-    "Indiano/asiático": 5,
-    "Havaiano/pacífico": 6,
-    "Outro": 7,
-    "Múltiplas raças": 8,
-    "Não informado": 9
-}
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR / "src"))
 
 from predict import predict_income
+from mappings import (
+    SEX_MAP,
+    MAR_MAP,
+    SCHL_MAP,
+    COW_MAP,
+    RACE_MAP,
+    OCCP_MAP,
+    POBP_MAP,
+)
 
 st.set_page_config(
     page_title="Preditor de Renda",
@@ -84,9 +48,20 @@ with st.form("income_form"):
 
     wkhp = st.slider("Horas trabalhadas por semana", 1, 80, 40)
 
-    occp = st.number_input("Código da ocupação", 0, 9999, 2200)
+    occp_label = st.selectbox(
+        "Área de atuação / ocupação",
+        list(OCCP_MAP.keys()),
+        help="Escolha a área de atuação mais próxima da ocupação da pessoa"
+    )
+    occp = OCCP_MAP[occp_label]
 
-    pobp = st.number_input("Local de nascimento (código)", 1, 100, 6)
+    pobp_label = st.selectbox(
+    "Local de nascimento",
+    list(POBP_MAP.keys()),
+    index=list(POBP_MAP.keys()).index("Califórnia"),
+    help="Código ACS convertido para uma opção legível."
+    ) 
+    pobp = POBP_MAP[pobp_label]
 
     submitted = st.form_submit_button("Prever renda")
 
