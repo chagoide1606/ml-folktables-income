@@ -4,6 +4,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score
 from imblearn.over_sampling import SMOTE
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_DIR = BASE_DIR / "models"
+
+MODEL_DIR.mkdir(exist_ok=True)
 
 from preprocess import preprocess_data
 from config import RANDOM_STATE, TEST_SIZE
@@ -54,7 +60,7 @@ model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 print("F1-score: ", f1_score(y_test, y_pred))
 
-joblib.dump(model, "models/model.pkl")
-joblib.dump(preprocessors, "models/scaler.pkl")
+joblib.dump(model, MODEL_DIR / "model.pkl")
+joblib.dump(preprocessors, MODEL_DIR / "preprocessors.pkl")
 
 print("Modelo treinado e salvo!")
