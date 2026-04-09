@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Ambiente
+venv/
+.env
+
+# Modelos (pesados)
+models/
+*.pkl
+
+# Dados
+data/
+
+# VSCode
+.vscode/
